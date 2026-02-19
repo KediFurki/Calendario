@@ -116,6 +116,14 @@ public class ConfigServlet extends HttpServlet {
 			if (clientId.isEmpty() || clientSecret.isEmpty() || urlRegion.isEmpty()) {
 				log.warn("Missing required properties: clientId/clientSecret/urlRegion. Check {}", ConfigLocation);
 			}
+			String tableServiceHours = prop.getProperty("table.serviceHours", "").trim();
+			String tableSpecialDays = prop.getProperty("table.specialDays", "").trim();
+
+			if (tableServiceHours.isEmpty() || tableSpecialDays.isEmpty()) {
+				log.warn("Missing table properties: table.serviceHours/table.specialDays. Check {}", ConfigLocation);
+			} else {
+				log.info("Data Tables configured - ServiceHours: {}, SpecialDays: {}", tableServiceHours, tableSpecialDays);
+			}
 
 		} catch (Exception e) {
 			log.log(Level.WARN, "Errore durante la configurazione iniziale", e);

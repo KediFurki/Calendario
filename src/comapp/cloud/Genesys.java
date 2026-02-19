@@ -1106,6 +1106,53 @@ public class Genesys {
 
 	}
 
+	/**
+	 * Yeni satır oluşturur (POST). Eğer satır zaten varsa hata verir.
+	 */
+	public static boolean addDatabaseRow(String trackId, GenesysUser guser, String databaseId, JSONObject jo) {
+		try {
+			String urlString = prefixApi + guser.urlRegion + "/api/v2/flows/datatables/" + databaseId + "/rows";
+			log.log(Level.INFO, trackId + "," + databaseId + " addDatabaseRow urlString:" + urlString + " ");
+
+			StringEntity he = new StringEntity(jo.toString(), "UTF-8");
+
+			return refinePerformRequestPost(trackId, guser, urlString, he, "application/json; charset=UTF-8") != null;
+		} catch (Exception e) {
+			log.log(Level.INFO, trackId + "," + databaseId + "- addDatabaseRow ", e);
+			return false;
+		}
+	}
+
+	/**
+	 * Satır yoksa oluşturur (POST), varsa günceller (PUT).
+	 */
+	public static boolean upsertDatabaseRow(String trackId, GenesysUser guser, String databaseId, JSONObject jo) {
+		try {
+			// Önce POST ile oluşturmayı dene
+			String urlString = prefixApi + guser.urlRegion + "/api/v2/flows/datatables/" + databaseId + "/rows";
+			log.log(Level.INFO, trackId + "," + databaseId + " upsertDatabaseRow (trying POST) urlString:" + urlString);
+
+			StringEntity he = new StringEntity(jo.toString(), "UTF-8");
+
+			try {
+				JSONObject result = refinePerformRequestPost(trackId, guser, urlString, he, "application/json; charset=UTF-8");
+				if (result != null) {
+					log.log(Level.INFO, trackId + "," + databaseId + " Row created successfully via POST");
+					return true;
+				}
+			} catch (Exception postEx) {
+				// POST başarısız oldu (muhtemelen satır zaten var), PUT ile güncelle
+				log.log(Level.INFO, trackId + "," + databaseId + " POST failed, trying PUT: " + postEx.getMessage());
+			}
+
+			// PUT ile güncelle
+			return putDatabaseRow(trackId, guser, databaseId, jo);
+		} catch (Exception e) {
+			log.log(Level.INFO, trackId + "," + databaseId + "- upsertDatabaseRow ", e);
+			return false;
+		}
+	}
+
 	public static boolean updateEdge(String trackId, GenesysUser guser, String id, JSONObject jStatusCode) {
 		try {
 			String urlString = prefixApi + guser.urlRegion + "/api/v2/telephony/providers/edges/" + id;
