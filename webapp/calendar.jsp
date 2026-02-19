@@ -351,8 +351,19 @@
 
             <div class="uk-margin">
                 <label class="uk-form-label">Working Hours</label>
-                <input class="uk-input" type="text" id="sd_hour" placeholder="Leave empty if fully closed, or enter 10:00-14:00">
-                <span class="info-text">Leave empty = Closed all day</span>
+                <div class="time-picker-row">
+                    <label style="min-width: 50px;">From:</label>
+                    <select id="sd_from_hour"></select>
+                    <span class="separator">:</span>
+                    <select id="sd_from_min"></select>
+                </div>
+                <div class="time-picker-row">
+                    <label style="min-width: 50px;">To:</label>
+                    <select id="sd_to_hour"></select>
+                    <span class="separator">:</span>
+                    <select id="sd_to_min"></select>
+                </div>
+                <span class="info-text">Leave as 00:00 - 00:00 for closed all day</span>
             </div>
 
             <div class="uk-margin">
@@ -509,8 +520,10 @@
         
         for (var i = 0; i < slots.length; i++) {
             var slot = slots[i];
+            var isClosed = (slot === '00:00-00:00');
+            
             html += '<div class="time-slot-item">' +
-                '<span>' + escapeHtml(slot) + '</span>' +
+                '<span>' + (isClosed ? '<span class="uk-label uk-label-danger">Closed</span>' : escapeHtml(slot)) + '</span>' +
                 '<button type="button" class="btn-remove-time-slot" data-index="' + index + '" data-day="' + day + '" data-slot="' + i + '">&times;</button>' +
             '</div>';
         }
@@ -534,7 +547,8 @@
             for (var j = 0; j < specialDays.length; j++) {
                 var sd = specialDays[j];
                 var datePart = sd.key.substring(sd.key.indexOf('.') + 1);
-                var hourDisplay = sd.hour ? escapeHtml(sd.hour) : '<span class="uk-label uk-label-danger">Closed</span>';
+                var isClosed = (sd.hour === '00:00-00:00' || !sd.hour);
+                var hourDisplay = isClosed ? '<span class="uk-label uk-label-danger">Closed</span>' : escapeHtml(sd.hour);
                 
                 html += '<div class="special-day-item">' +
                     '<div>' +
@@ -817,8 +831,9 @@
         var html = '';
         
         for (var i = 0; i < slots.length; i++) {
+            var isClosed = (slots[i] === '00:00-00:00');
             html += '<div class="time-slot-item">' +
-                '<span>' + escapeHtml(slots[i]) + '</span>' +
+                '<span>' + (isClosed ? '<span class="uk-label uk-label-danger">Closed</span>' : escapeHtml(slots[i])) + '</span>' +
                 '<button type="button" class="btn-remove-time-slot-new" data-day="' + day + '" data-slot="' + i + '">&times;</button>' +
             '</div>';
         }
@@ -850,13 +865,19 @@
             for (var i = 0; i < days.length; i++) {
                 var day = days[i];
                 var hiddenInput = document.getElementById('edit_' + day + '_' + index);
-                hiddenInput.value = '';
+                hiddenInput.value = '00:00-00:00';
                 
                 var container = document.getElementById('timeSlots_' + index + '_' + day);
-                container.innerHTML = '<p class="uk-text-muted uk-text-small uk-margin-remove">No hours set (Closed)</p>';
+                container.innerHTML = '<div class="time-slot-item"><span><span class="uk-label uk-label-danger">Closed</span></span><button type="button" class="btn-remove-time-slot" data-index="' + index + '" data-day="' + day + '" data-slot="0">&times;</button></div>';
             }
             
-            UIkit.notification({message: 'All time slots cleared. Click "Save Changes" to apply.', status: 'success'});
+            document.querySelectorAll('.btn-remove-time-slot').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    removeTimeSlot(btn.getAttribute('data-index'), btn.getAttribute('data-day'), btn.getAttribute('data-slot'));
+                });
+            });
+            
+            UIkit.notification({message: 'All time slots reset to Closed (00:00-00:00). Click "Save Changes" to apply.', status: 'success'});
         }, function() {});
     }
 
@@ -866,6 +887,14 @@
         document.getElementById('new_key').focus();
         newCalendarSpecialDays = [];
         renderNewCalendarSpecialDays();
+        
+        // Default olarak tüm günlere 00:00-00:00 (Kapalı) ata
+        var days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+        for (var i = 0; i < days.length; i++) {
+            var day = days[i];
+            document.getElementById('new_' + day).value = '00:00-00:00';
+            updateNewCalendarTimeSlotDisplay(day);
+        }
     }
 
     function hideNewCalendarForm() {
@@ -890,25 +919,86 @@
             return;
         }
         
-        var date = prompt('Enter date (DD.MM or DD.MM.YYYY):', '01.01');
-        if (!date) return;
+        var modalHtml = '<div id="newSpecialDayModal" class="uk-flex-top" uk-modal>' +
+            '<div class="uk-modal-dialog uk-modal-body uk-margin-auto-vertical">' +
+                '<button class="uk-modal-close-default" type="button" uk-close></button>' +
+                '<h2 class="uk-modal-title"><span uk-icon="star"></span> Add Special Day</h2>' +
+                
+                '<div class="uk-margin">' +
+                    '<label class="uk-form-label">Date *</label>' +
+                    '<input class="uk-input" type="text" id="nsd_date" placeholder="DD.MM or DD.MM.YYYY">' +
+                    '<span class="info-text">For yearly holidays: 01.01 | For specific dates: 21.04.2026</span>' +
+                '</div>' +
+                
+                '<div class="uk-margin">' +
+                    '<label class="uk-form-label">Working Hours</label>' +
+                    '<div class="time-picker-row">' +
+                        '<label style="min-width: 50px;">From:</label>' +
+                        '<select id="nsd_from_hour">' + generateHourOptions(0) + '</select>' +
+                        '<span class="separator">:</span>' +
+                        '<select id="nsd_from_min">' + generateMinuteOptions() + '</select>' +
+                    '</div>' +
+                    '<div class="time-picker-row">' +
+                        '<label style="min-width: 50px;">To:</label>' +
+                        '<select id="nsd_to_hour">' + generateHourOptions(0) + '</select>' +
+                        '<span class="separator">:</span>' +
+                        '<select id="nsd_to_min">' + generateMinuteOptions() + '</select>' +
+                    '</div>' +
+                    '<span class="info-text">Leave as 00:00 - 00:00 for closed all day</span>' +
+                '</div>' +
+                
+                '<div class="uk-margin">' +
+                    '<label class="uk-form-label">Message (optional)</label>' +
+                    '<input class="uk-input" type="text" id="nsd_msg" placeholder="E.g.: New Year\'s Day">' +
+                '</div>' +
+                
+                '<div class="uk-margin uk-text-right">' +
+                    '<button class="uk-button uk-button-default uk-modal-close" type="button">Cancel</button>' +
+                    '<button class="uk-button uk-button-primary" type="button" id="btnConfirmNewSpecialDay">Add</button>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
         
-        var dateRegex = /^(\d{2})\.(\d{2})(\.(\d{4}))?$/;
-        if (!dateRegex.test(date)) {
-            UIkit.notification({message: 'Invalid date format! Use DD.MM or DD.MM.YYYY', status: 'warning'});
-            return;
-        }
+        var oldModal = document.getElementById('newSpecialDayModal');
+        if (oldModal) oldModal.remove();
         
-        var hour = prompt('Working hours (leave empty if closed all day):', '');
-        var msg = prompt('Message (optional):', '');
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
         
-        newCalendarSpecialDays.push({
-            date: date,
-            hour: hour || '',
-            msg_off_days: msg || ''
+        var modal = UIkit.modal('#newSpecialDayModal');
+        modal.show();
+        
+        document.getElementById('btnConfirmNewSpecialDay').addEventListener('click', function() {
+            var date = document.getElementById('nsd_date').value.trim();
+            
+            if (!date) {
+                UIkit.notification({message: 'Please enter a date!', status: 'warning'});
+                return;
+            }
+            
+            var dateRegex = /^(\d{2})\.(\d{2})(\.(\d{4}))?$/;
+            if (!dateRegex.test(date)) {
+                UIkit.notification({message: 'Invalid date format! Use DD.MM or DD.MM.YYYY', status: 'warning'});
+                return;
+            }
+            
+            var fromHour = document.getElementById('nsd_from_hour').value;
+            var fromMin = document.getElementById('nsd_from_min').value;
+            var toHour = document.getElementById('nsd_to_hour').value;
+            var toMin = document.getElementById('nsd_to_min').value;
+            
+            var hour = fromHour + ':' + fromMin + '-' + toHour + ':' + toMin;
+            var msg = document.getElementById('nsd_msg').value.trim();
+            
+            newCalendarSpecialDays.push({
+                date: date,
+                hour: hour,
+                msg_off_days: msg
+            });
+            
+            renderNewCalendarSpecialDays();
+            modal.hide();
+            document.getElementById('newSpecialDayModal').remove();
         });
-        
-        renderNewCalendarSpecialDays();
     }
 
     function renderNewCalendarSpecialDays() {
@@ -922,7 +1012,8 @@
         var html = '';
         for (var i = 0; i < newCalendarSpecialDays.length; i++) {
             var sd = newCalendarSpecialDays[i];
-            var hourDisplay = sd.hour ? escapeHtml(sd.hour) : '<span class="uk-label uk-label-danger">Closed</span>';
+            var isClosed = (sd.hour === '00:00-00:00' || !sd.hour);
+            var hourDisplay = isClosed ? '<span class="uk-label uk-label-danger">Closed</span>' : escapeHtml(sd.hour);
             
             html += '<div class="special-day-item">' +
                 '<div>' +
@@ -1089,8 +1180,13 @@
     function openAddSpecialDayModal(calendarKey) {
         document.getElementById('sd_calendarKey').value = calendarKey;
         document.getElementById('sd_date').value = '';
-        document.getElementById('sd_hour').value = '';
         document.getElementById('sd_msg').value = '';
+        
+        document.getElementById('sd_from_hour').innerHTML = generateHourOptions(0);
+        document.getElementById('sd_from_min').innerHTML = generateMinuteOptions('00');
+        document.getElementById('sd_to_hour').innerHTML = generateHourOptions(0);
+        document.getElementById('sd_to_min').innerHTML = generateMinuteOptions('00');
+        
         UIkit.modal('#addSpecialDayModal').show();
     }
 
@@ -1110,10 +1206,17 @@
         }
 
         var generatedKey = calendarKey + '.' + date;
+        
+        var fromHour = document.getElementById('sd_from_hour').value;
+        var fromMin = document.getElementById('sd_from_min').value;
+        var toHour = document.getElementById('sd_to_hour').value;
+        var toMin = document.getElementById('sd_to_min').value;
+        
+        var hour = fromHour + ':' + fromMin + '-' + toHour + ':' + toMin;
 
         var data = {
             key: generatedKey,
-            hour: document.getElementById('sd_hour').value.trim(),
+            hour: hour,
             msg_off_days: document.getElementById('sd_msg').value.trim()
         };
 
