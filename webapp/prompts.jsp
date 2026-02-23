@@ -30,15 +30,23 @@
         .prompt-table td { padding: 8px; border-bottom: 1px solid #e5e5e5; vertical-align: middle; }
         .prompt-table tr:hover { background: #f8f9fa; }
         .prompt-table tr:last-child td { border-bottom: none; }
-        .col-id   { width: 45px;  text-align: center; color: #999; font-size: 12px; }
-        .col-name { width: 160px; font-weight: 600; color: #333; word-break: break-word; }
-        .col-tts  { max-width: 220px; word-break: break-word; color: #555; font-size: 12px; line-height: 1.4; }
-        .col-audio{ width: 160px; }
-        .action-buttons { display: flex; gap: 5px; flex-wrap: wrap; }
-        .action-buttons button { padding: 4px 8px; font-size: 11px; }
+        .col-chk  { width: 32px;  text-align: center; }
+        .col-id   { width: 40px;  text-align: center; color: #999; font-size: 12px; }
+        .col-name { width: 150px; font-weight: 600; color: #333; word-break: break-word; }
+        .col-tts  { max-width: 200px; word-break: break-word; color: #555; font-size: 12px; line-height: 1.4; }
+        .col-audio{ width: 170px; }
+        .col-del  { width: 44px;  text-align: center; }
+        .action-buttons { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+        .action-buttons button { padding: 3px 7px; font-size: 11px; }
         .no-content { color: #bbb; font-style: italic; font-size: 11px; }
         .btn-del-audio { background: #fd7e14; border-color: #fd7e14; color: white; }
         .btn-del-audio:hover { background: #e36910; }
+        .btn-clear-tts { background: #dc3545; border-color: #dc3545; color: white; }
+        .btn-clear-tts:hover { background: #b02a37; }
+        .btn-del-all { background: none; border: none; color: #dc3545; cursor: pointer; padding: 4px 6px; font-size: 18px; line-height: 1; }
+        .btn-del-all:hover { color: #a71d2a; }
+        .csv-toolbar { display: flex; gap: 10px; align-items: center; padding: 10px 20px; background: #f1f3f9; border-bottom: 1px solid #dee2e6; flex-wrap: wrap; }
+        .csv-toolbar .sel-count { font-size: 13px; color: #555; }
         .section-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; background: #f1f3f9; border-bottom: 1px solid #dee2e6; flex-wrap: wrap; gap: 10px; }
         .back-btn { cursor: pointer; color: #667eea; font-weight: 600; display: flex; align-items: center; gap: 6px; }
         .back-btn:hover { color: #764ba2; }
@@ -89,26 +97,39 @@
                     <span id="filterCount" class="uk-text-muted" style="font-size:12px;"></span>
                 </div>
             </div>
-            <div style="overflow-x:auto;">
+            <div class="csv-toolbar" id="csvToolbar">
+                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                        <input type="checkbox" id="selectAllChk" title="Select / Deselect all on this page"> <span style="font-size:13px;font-weight:600;">Select All</span>
+                    </label>
+                    <span class="sel-count" id="selCount">0 selected</span>
+                    <button class="uk-button uk-button-primary uk-button-small" onclick="exportSelectedCsv()" id="btnExportCsv" disabled>
+                        <span uk-icon="icon:download;ratio:0.8"></span> Export CSV
+                    </button>
+                    <button class="uk-button uk-button-default uk-button-small" onclick="exportAllCsv()">
+                        <span uk-icon="icon:table;ratio:0.8"></span> Export All CSV
+                    </button>
+                </div>
+                <div style="overflow-x:auto;">
                 <table class="prompt-table" id="promptTable">
                     <thead>
                         <tr>
+                            <th class="col-chk" rowspan="2"><input type="checkbox" id="selectAllChkHeader" title="Select all" onchange="toggleSelectAll(this.checked)"></th>
                             <th class="col-id" rowspan="2">#</th>
-                            <th style="width:160px;" rowspan="2">Name</th>
+                            <th style="width:150px;" rowspan="2">Name</th>
                             <th colspan="2" class="header-group" style="text-align:center;">ASR</th>
                             <th colspan="2" class="header-group" style="text-align:center;">TMF</th>
-                            <th style="width:90px;" rowspan="2">Actions</th>
+                            <th class="col-del" rowspan="2" title="Delete entire row">🗑</th>
                         </tr>
                         <tr>
-                            <th class="header-sub" style="width:220px;">TTS</th>
-                            <th class="header-sub" style="width:150px;">Audio</th>
-                            <th class="header-sub" style="width:220px;">TTS</th>
-                            <th class="header-sub" style="width:150px;">Audio</th>
+                            <th class="header-sub" style="width:200px;">TTS</th>
+                            <th class="header-sub" style="width:180px;">Audio</th>
+                            <th class="header-sub" style="width:200px;">TTS</th>
+                            <th class="header-sub" style="width:180px;">Audio</th>
                         </tr>
                     </thead>
                     <tbody id="promptTableBody"></tbody>
                 </table>
-            </div>
+                </div>
             <div class="pagination" id="paginationBar"></div>
         </div>
     </div>
@@ -174,6 +195,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.getElementById('btnConfirmTts').addEventListener('click', saveTtsText);
     document.getElementById('audioFileInput').addEventListener('change', function() {
         this.nextElementSibling.value = this.files.length > 0 ? this.files[0].name : '';
+    });
+    document.getElementById('selectAllChk').addEventListener('change', function() {
+        toggleSelectAll(this.checked);
     });
     loadDnisList();
 });
@@ -241,6 +265,11 @@ function loadPromptsForDnis() {
     .then(function(data) {
         allRows = data;
         currentPage = 1;
+        // reset checkboxes
+        var hdr = document.getElementById('selectAllChkHeader');
+        if (hdr) hdr.checked = false;
+        var top = document.getElementById('selectAllChk');
+        if (top) top.checked = false;
         applyFilter();
     })
     .catch(function(e) {
@@ -274,13 +303,15 @@ function renderPage() {
 
     if (filteredRows.length === 0) {
         tbody.innerHTML = '<tr>' +
+            '<td class="col-chk"></td>' +
             '<td class="col-id">—</td>' +
             '<td class="col-name uk-text-muted">—</td>' +
             '<td class="col-tts uk-text-muted" colspan="2">No prompts found</td>' +
             '<td class="col-tts uk-text-muted" colspan="2">—</td>' +
-            '<td></td>' +
+            '<td class="col-del"></td>' +
             '</tr>';
         document.getElementById('paginationBar').innerHTML = '';
+        updateSelCount();
         return;
     }
 
@@ -288,8 +319,13 @@ function renderPage() {
     pageRows.forEach(function(row) {
         var asr = row.asr || {};
         var tmf = row.tmf || {};
-        html += '<tr>';
+        var rid = 'row_' + row.rowId;
+        html += '<tr id="tr_' + row.rowId + '">';
+        // Checkbox
+        html += '<td class="col-chk"><input type="checkbox" class="row-chk" data-rowid="' + row.rowId + '" onchange="updateSelCount()"></td>';
+        // ID
         html += '<td class="col-id">' + row.rowId + '</td>';
+        // Name
         html += '<td class="col-name">' + escapeHtml(row.name || '') + '</td>';
         // ASR TTS
         html += renderTtsCell(asr, row.name, 'ASR');
@@ -299,38 +335,43 @@ function renderPage() {
         html += renderTtsCell(tmf, row.name, 'TMF');
         // TMF Audio
         html += renderAudioCell(tmf, row.name + '_tmf', 'TMF');
-        // Actions (delete whole pair)
-        html += '<td>';
-        if (asr.id && asr.found) {
-            html += '<button class="uk-button uk-button-danger uk-button-small" style="font-size:11px;" ' +
-                'onclick="confirmDeletePrompt(\'' + escapeHtml(asr.id) + '\',\'' + escapeHtml(tmf.id||'') + '\',\'' + escapeHtml(row.name) + '\')" ' +
-                'title="Delete both ASR and TMF prompts">' +
-                '<span uk-icon="icon:trash;ratio:0.8"></span> Del All</button>';
-        }
+        // Del All
+        html += '<td class="col-del">';
+        html += '<button class="btn-del-all" title="Delete both ASR and TMF prompts" ' +
+            'onclick="confirmDeletePrompt(\'' + escapeHtml(asr.id||'') + '\',\'' + escapeHtml(tmf.id||'') + '\',\'' + escapeHtml(row.name) + '\')">🗑</button>';
         html += '</td>';
         html += '</tr>';
     });
     tbody.innerHTML = html;
+    updateSelCount();
     renderPagination();
 }
 
 function renderTtsCell(info, name, type) {
-    var tts = (info.ttsText || '').trim();
-    var pid = info.id || '';
-    var rid = info.resourceId || '';
+    var tts  = (info.ttsText || '').trim();
+    var pid  = info.id || '';
+    var rid  = info.resourceId || '';
     var pname = info.name || '';
+    var safeLabel = escapeHtml(name + ' [' + type + ']');
+    var safeTts   = escapeHtml(tts.replace(/'/g,"\\'").replace(/\n/g,"\\n"));
     var html = '<td class="col-tts">';
     if (tts) {
-        html += '<div class="tts-truncated" title="' + escapeHtml(tts) + '">' + escapeHtml(tts.length > 120 ? tts.substring(0,120) + '…' : tts) + '</div>';
+        html += '<div class="tts-truncated" title="' + escapeHtml(tts) + '">' +
+            escapeHtml(tts.length > 100 ? tts.substring(0,100) + '…' : tts) + '</div>';
     } else {
         html += '<span class="no-content">No TTS</span>';
     }
-    html += '<div class="action-buttons" style="margin-top:4px;">';
-    html += '<button class="uk-button uk-button-default uk-button-small" onclick="openTtsModal(\'' + escapeHtml(pid) + '\',\'' + escapeHtml(rid) + '\',\'' + escapeHtml(pname) + '\',\'' + escapeHtml(name + ' [' + type + ']') + '\',\'' + escapeHtml(tts.replace(/'/g,"\\'").replace(/\n/g,"\\n")) + '\')">' +
+    html += '<div class="action-buttons">';
+    // Edit TTS
+    html += '<button class="uk-button uk-button-default uk-button-small" title="Edit TTS" ' +
+        'onclick="openTtsModal(\'' + escapeHtml(pid) + '\',\'' + escapeHtml(rid) + '\',\'' +
+        escapeHtml(pname) + '\',\'' + safeLabel + '\',\'' + safeTts + '\')">' +
         '<span uk-icon="icon:pencil;ratio:0.8"></span></button>';
+    // Clear TTS (only when there is text)
     if (tts && pid) {
-        html += '<button class="uk-button uk-button-danger uk-button-small" onclick="confirmClearTts(\'' + escapeHtml(pid) + '\',\'' + escapeHtml(rid) + '\',\'' + escapeHtml(name + ' [' + type + ']') + '\')">' +
-            '<span uk-icon="icon:trash;ratio:0.8"></span></button>';
+        html += '<button class="uk-button btn-clear-tts uk-button-small" title="Clear TTS text" ' +
+            'onclick="confirmClearTts(\'' + escapeHtml(pid) + '\',\'' + escapeHtml(rid) + '\',\'' + safeLabel + '\')">' +
+            '<span uk-icon="icon:trash;ratio:0.8"></span> TTS</button>';
     }
     html += '</div></td>';
     return html;
@@ -345,19 +386,35 @@ function renderAudioCell(info, uiKey, type) {
     var tts      = (info.ttsText || '').replace(/'/g,"\\'").replace(/\n/g,"\\n");
     var pname    = info.name || '';
     var dname    = info.displayName || '';
+    var safeLabel = escapeHtml(dname + ' [' + type + ']');
     var html     = '<td class="col-audio"><div class="action-buttons">';
     if (hasAudio && audioUrl) {
-        html += '<audio id="aud_' + escapeHtml(uiKey) + '" style="display:none;"><source src="' + API_BASE + '/audio?audioUrl=' + encodeURIComponent(audioUrl) + '" type="audio/wav"></audio>';
-        html += '<button class="uk-button uk-button-default uk-button-small" onclick="togglePlay(\'' + escapeHtml(uiKey) + '\')" id="pb_' + escapeHtml(uiKey) + '"><span uk-icon="icon:play;ratio:0.8"></span></button>';
-        html += '<button class="uk-button uk-button-secondary uk-button-small" onclick="downloadAudio(\'' + escapeHtml(audioUrl) + '\',\'' + escapeHtml(dname) + '_' + type + '\')"><span uk-icon="icon:download;ratio:0.8"></span></button>';
+        html += '<audio id="aud_' + escapeHtml(uiKey) + '" style="display:none;">' +
+            '<source src="' + API_BASE + '/audio?audioUrl=' + encodeURIComponent(audioUrl) + '" type="audio/wav"></audio>';
+        // Play
+        html += '<button class="uk-button uk-button-default uk-button-small" title="Play" ' +
+            'onclick="togglePlay(\'' + escapeHtml(uiKey) + '\')" id="pb_' + escapeHtml(uiKey) + '">' +
+            '<span uk-icon="icon:play;ratio:0.8"></span></button>';
+        // Download
+        html += '<button class="uk-button uk-button-secondary uk-button-small" title="Download" ' +
+            'onclick="downloadAudio(\'' + escapeHtml(audioUrl) + '\',\'' + escapeHtml(dname) + '_' + type + '\')">' +
+            '<span uk-icon="icon:download;ratio:0.8"></span></button>';
+        // Del Audio
         if (pid) {
-            html += '<button class="uk-button uk-button-small btn-del-audio" onclick="confirmDeleteAudio(\'' + escapeHtml(pid) + '\',\'' + escapeHtml(rid) + '\',\'' + escapeHtml(lang) + '\',\'' + tts + '\',\'' + escapeHtml(dname + ' [' + type + ']') + '\')"><span uk-icon="icon:trash;ratio:0.8"></span></button>';
+            html += '<button class="uk-button btn-del-audio uk-button-small" title="Delete audio file" ' +
+                'onclick="confirmDeleteAudio(\'' + escapeHtml(pid) + '\',\'' + escapeHtml(rid) + '\',\'' +
+                escapeHtml(lang) + '\',\'' + tts + '\',\'' + safeLabel + '\')">' +
+                '<span uk-icon="icon:trash;ratio:0.8"></span></button>';
         }
     } else {
         html += '<span class="no-content">No audio</span>&nbsp;';
     }
+    // Upload
     if (pid) {
-        html += '<button class="uk-button uk-button-primary uk-button-small" onclick="openUploadModal(\'' + escapeHtml(pid) + '\',\'' + escapeHtml(rid) + '\',\'' + escapeHtml(pname) + '\',\'' + escapeHtml(dname + ' [' + type + ']') + '\')"><span uk-icon="icon:upload;ratio:0.8"></span></button>';
+        html += '<button class="uk-button uk-button-primary uk-button-small" title="Upload audio" ' +
+            'onclick="openUploadModal(\'' + escapeHtml(pid) + '\',\'' + escapeHtml(rid) + '\',\'' +
+            escapeHtml(pname) + '\',\'' + safeLabel + '\')">' +
+            '<span uk-icon="icon:upload;ratio:0.8"></span></button>';
     }
     html += '</div></td>';
     return html;
@@ -504,6 +561,90 @@ function confirmDeletePrompt(asrId, tmfId, name) {
             loadPromptsForDnis();
         }).catch(function(e){ UIkit.notification({message:'Error: '+e.message, status:'danger'}); });
     }, function(){});
+}
+
+// ── CHECKBOX & CSV EXPORT ──────────────────────────────────────────────────────
+function updateSelCount() {
+    var checked = document.querySelectorAll('.row-chk:checked');
+    var total   = document.querySelectorAll('.row-chk');
+    var n = checked.length;
+    var el = document.getElementById('selCount');
+    if (el) el.textContent = n + ' selected';
+    var btn = document.getElementById('btnExportCsv');
+    if (btn) btn.disabled = (n === 0);
+    // sync header checkbox
+    var hdr = document.getElementById('selectAllChkHeader');
+    if (hdr) hdr.checked = (total.length > 0 && n === total.length);
+    var top = document.getElementById('selectAllChk');
+    if (top) top.checked = (total.length > 0 && n === total.length);
+}
+
+function toggleSelectAll(checked) {
+    document.querySelectorAll('.row-chk').forEach(function(c) { c.checked = checked; });
+    // keep both checkboxes in sync
+    var hdr = document.getElementById('selectAllChkHeader');
+    if (hdr) hdr.checked = checked;
+    var top = document.getElementById('selectAllChk');
+    if (top) top.checked = checked;
+    updateSelCount();
+}
+
+function getSelectedRowIds() {
+    var ids = [];
+    document.querySelectorAll('.row-chk:checked').forEach(function(c) {
+        ids.push(parseInt(c.getAttribute('data-rowid'), 10));
+    });
+    return ids;
+}
+
+function buildCsvFromRows(rows) {
+    var header = ['#','Name','TTS ASR','Has Audio ASR','TTS TMF','Has Audio TMF'];
+    var lines  = [header.map(csvEscape).join(',')];
+    rows.forEach(function(row) {
+        var asr = row.asr || {};
+        var tmf = row.tmf || {};
+        lines.push([
+            row.rowId,
+            csvEscape(row.name || ''),
+            csvEscape(asr.ttsText || ''),
+            asr.hasAudio ? 'Yes' : 'No',
+            csvEscape(tmf.ttsText || ''),
+            tmf.hasAudio ? 'Yes' : 'No'
+        ].join(','));
+    });
+    return lines.join('\r\n');
+}
+
+function csvEscape(val) {
+    val = String(val);
+    if (val.indexOf(',') !== -1 || val.indexOf('"') !== -1 || val.indexOf('\n') !== -1) {
+        return '"' + val.replace(/"/g, '""') + '"';
+    }
+    return val;
+}
+
+function downloadCsv(csvContent, filename) {
+    var blob = new Blob(['\uFEFF' + csvContent], { type: 'text/csv;charset=utf-8;' });
+    var url  = URL.createObjectURL(blob);
+    var a    = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+function exportSelectedCsv() {
+    var ids = getSelectedRowIds();
+    if (ids.length === 0) { UIkit.notification({message:'No rows selected!', status:'warning'}); return; }
+    var selected = filteredRows.filter(function(r) { return ids.indexOf(r.rowId) !== -1; });
+    var csv = buildCsvFromRows(selected);
+    downloadCsv(csv, 'prompts_' + currentDnis + '_selected.csv');
+}
+
+function exportAllCsv() {
+    if (filteredRows.length === 0) { UIkit.notification({message:'No data to export!', status:'warning'}); return; }
+    var csv = buildCsvFromRows(filteredRows);
+    downloadCsv(csv, 'prompts_' + currentDnis + '_all.csv');
 }
 
 function escapeHtml(text) {
