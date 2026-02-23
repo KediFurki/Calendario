@@ -29,10 +29,19 @@ public class CalendarService {
         return new GenesysUser(trackId, clientId, clientSecret, urlRegion);
     }
 
+    private static boolean isUuid(String s) {
+        return s != null && s.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+    }
+
     private static String getTableIdByName(String trackId, GenesysUser guser, String tableName, boolean isServiceHours) {
         if (isServiceHours && cachedServiceHoursTableId != null) return cachedServiceHoursTableId;
         if (!isServiceHours && cachedSpecialDaysTableId != null) return cachedSpecialDaysTableId;
-
+        if (isUuid(tableName)) {
+            log.info(trackId + " Using table UUID directly: " + tableName);
+            if (isServiceHours) cachedServiceHoursTableId = tableName;
+            else cachedSpecialDaysTableId = tableName;
+            return tableName;
+        }
         try {
             JSONArray dataTables = Genesys.getAllDataTable(trackId, guser, tableName, null);
             if (dataTables != null && dataTables.length() > 0) {
@@ -95,7 +104,6 @@ public class CalendarService {
                 return false;
             }
 
-            // upsertDatabaseRow: yoksa oluşturur (POST), varsa günceller (PUT)
             return Genesys.upsertDatabaseRow(trackId, guser, tableId, rowData);
         } catch (Exception e) {
             log.error(trackId + " Error occurred while saving row. Table isServiceHours=" + isServiceHours, e);

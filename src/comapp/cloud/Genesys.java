@@ -2649,5 +2649,347 @@ public class Genesys {
 
 	}
 
+	public static JSONArray getAllPrompts(String trackId, GenesysUser guser) {
+		try {
+			return fetchAllEntities(trackId, (pageNumber) -> {
+				return getPromptsPage(trackId, guser, pageNumber, 100);
+			}, "getAllPrompts");
+		} catch (Exception e) {
+			log.log(Level.ERROR, trackId + " - getAllPrompts error", e);
+			return new JSONArray();
+		}
+	}
+
+	public static JSONObject getPromptsPage(String trackId, GenesysUser guser, int pageNumber, int pageSize) {
+		try {
+			String urlString = prefixApi + guser.urlRegion + "/api/v2/architect/prompts?pageSize=" + pageSize + "&pageNumber=" + pageNumber;
+			log.log(Level.INFO, trackId + " getPromptsPage urlString:" + urlString);
+			Object result = refinePerformRequestGet(trackId, guser, urlString);
+			return result instanceof JSONObject ? (JSONObject) result : null;
+		} catch (Exception e) {
+			log.log(Level.INFO, trackId + " - getPromptsPage ", e);
+		}
+		return null;
+	}
+
+	public static JSONObject getPromptByName(String trackId, GenesysUser guser, String promptName) {
+		try {
+			String encodedName = URLEncoder.encode(promptName, StandardCharsets.UTF_8.toString());
+			String urlString = prefixApi + guser.urlRegion + "/api/v2/architect/prompts?name=" + encodedName;
+			log.log(Level.INFO, trackId + " getPromptByName urlString:" + urlString);
+			Object result = refinePerformRequestGet(trackId, guser, urlString);
+			JSONObject response = result instanceof JSONObject ? (JSONObject) result : null;
+			if (response != null && response.has("entities")) {
+				JSONArray entities = response.getJSONArray("entities");
+				if (entities.length() > 0) {
+					return entities.getJSONObject(0);
+				}
+			}
+		} catch (Exception e) {
+			log.log(Level.INFO, trackId + " - getPromptByName ", e);
+		}
+		return null;
+	}
+
+	public static JSONArray getPromptResources(String trackId, GenesysUser guser, String promptId) {
+		try {
+			String urlString = prefixApi + guser.urlRegion + "/api/v2/architect/prompts/" + promptId + "/resources";
+			log.log(Level.INFO, trackId + " getPromptResources urlString:" + urlString);
+			Object result = refinePerformRequestGet(trackId, guser, urlString);
+			JSONObject response = result instanceof JSONObject ? (JSONObject) result : null;
+			if (response != null && response.has("entities")) {
+				return response.getJSONArray("entities");
+			}
+		} catch (Exception e) {
+			log.log(Level.INFO, trackId + " - getPromptResources ", e);
+		}
+		return new JSONArray();
+	}
+
+	public static JSONObject createPrompt(String trackId, GenesysUser guser, String promptName, String description) {
+		try {
+			String urlString = prefixApi + guser.urlRegion + "/api/v2/architect/prompts";
+			log.log(Level.INFO, trackId + " createPrompt urlString:" + urlString + " name:" + promptName);
+			
+			JSONObject body = new JSONObject();
+			body.put("name", promptName);
+			if (description != null && !description.isEmpty()) {
+				body.put("description", description);
+			}
+			
+			StringEntity entity = new StringEntity(body.toString(), StandardCharsets.UTF_8);
+			entity.setContentType("application/json");
+			
+			Object result = refinePerformRequestPost(trackId, guser, urlString, entity, "application/json; charset=UTF-8");
+			JSONObject response = result instanceof JSONObject ? (JSONObject) result : null;
+			
+			if (response != null && response.has("id")) {
+				log.log(Level.INFO, trackId + " createPrompt success - ID: " + response.getString("id"));
+				return response;
+			} else {
+				log.log(Level.WARN, trackId + " createPrompt failed - response: " + response);
+			}
+		} catch (Exception e) {
+			log.log(Level.ERROR, trackId + " - createPrompt error", e);
+		}
+		return null;
+	}
+
+	public static boolean deletePrompt(String trackId, GenesysUser guser, String promptId) {
+		try {
+			log.log(Level.INFO, trackId + " deletePrompt - First deleting all resources for promptId: " + promptId);
+			JSONArray resources = getPromptResources(trackId, guser, promptId);
+			
+			if (resources != null && resources.length() > 0) {
+				for (int i = 0; i < resources.length(); i++) {
+					JSONObject resource = resources.getJSONObject(i);
+					String resourceId = resource.optString("id", "");
+					if (!resourceId.isEmpty()) {
+						log.log(Level.INFO, trackId + " Deleting resource: " + resourceId);
+						deletePromptResource(trackId, guser, promptId, resourceId);
+					}
+				}
+			}
+			
+			String urlString = prefixApi + guser.urlRegion + "/api/v2/architect/prompts/" + promptId;
+			log.log(Level.INFO, trackId + " deletePrompt urlString:" + urlString);
+			
+			Object result = refinePerformRequestDelete(trackId, guser, urlString);
+			
+			log.log(Level.INFO, trackId + " deletePrompt success - promptId: " + promptId);
+			return true;
+			
+		} catch (GenesysCloud204Exception e) {
+			log.log(Level.INFO, trackId + " deletePrompt success (204) - promptId: " + promptId);
+			return true;
+		} catch (GenesysCloud200 e) {
+			log.log(Level.INFO, trackId + " deletePrompt success (200) - promptId: " + promptId);
+			return true;
+		} catch (Exception e) {
+			log.log(Level.ERROR, trackId + " - deletePrompt error for promptId: " + promptId, e);
+			return false;
+		}
+	}
+	public static boolean deletePromptAudio(String trackId, GenesysUser guser, String promptId, String resourceId, String language, String existingTtsText) {
+		try {
+			log.log(Level.INFO, trackId + " deletePromptAudio - deleting resource to remove audio. promptId: " + promptId + " resourceId: " + resourceId);
+			boolean deleted = deletePromptResource(trackId, guser, promptId, resourceId);
+			if (!deleted) {
+				log.log(Level.ERROR, trackId + " deletePromptAudio - failed to delete resource: " + resourceId);
+				return false;
+			}
+			String lang = (language == null || language.isEmpty()) ? "it-it" : language;
+			JSONObject newResource = createPromptResource(trackId, guser, promptId, lang);
+			if (newResource == null) {
+				log.log(Level.ERROR, trackId + " deletePromptAudio - failed to recreate resource for promptId: " + promptId);
+				return false;
+			}
+			String newResourceId = newResource.optString("id", "");
+			log.log(Level.INFO, trackId + " deletePromptAudio - recreated resource: " + newResourceId);
+			if (existingTtsText != null && !existingTtsText.trim().isEmpty()) {
+				updatePromptTts(trackId, guser, promptId, newResourceId, existingTtsText);
+				log.log(Level.INFO, trackId + " deletePromptAudio - restored TTS text for promptId: " + promptId);
+			}
+			return true;
+		} catch (Exception e) {
+			log.log(Level.ERROR, trackId + " - deletePromptAudio error for promptId: " + promptId, e);
+			return false;
+		}
+	}
+
+	public static boolean deletePromptResource(String trackId, GenesysUser guser, String promptId, String resourceId) {
+		try {
+			String urlString = prefixApi + guser.urlRegion + "/api/v2/architect/prompts/" + promptId + "/resources/" + resourceId;
+			log.log(Level.INFO, trackId + " deletePromptResource urlString:" + urlString);
+			
+			Object result = refinePerformRequestDelete(trackId, guser, urlString);
+			
+			log.log(Level.INFO, trackId + " deletePromptResource success - resourceId: " + resourceId);
+			return true;
+			
+		} catch (GenesysCloud204Exception e) {
+			log.log(Level.INFO, trackId + " deletePromptResource success (204) - resourceId: " + resourceId);
+			return true;
+		} catch (GenesysCloud200 e) {
+			log.log(Level.INFO, trackId + " deletePromptResource success (200) - resourceId: " + resourceId);
+			return true;
+		} catch (Exception e) {
+			log.log(Level.ERROR, trackId + " - deletePromptResource error for resourceId: " + resourceId, e);
+			return false;
+		}
+	}
+
+	public static JSONObject createPromptResource(String trackId, GenesysUser guser, String promptId, String language) {
+		try {
+			String urlString = prefixApi + guser.urlRegion + "/api/v2/architect/prompts/" + promptId + "/resources";
+			log.log(Level.INFO, trackId + " createPromptResource urlString:" + urlString + " language:" + language);
+			
+			JSONObject body = new JSONObject();
+			body.put("language", language);
+			
+			StringEntity entity = new StringEntity(body.toString(), StandardCharsets.UTF_8);
+			entity.setContentType("application/json");
+			
+			Object result = refinePerformRequestPost(trackId, guser, urlString, entity, "application/json; charset=UTF-8");
+			JSONObject response = result instanceof JSONObject ? (JSONObject) result : null;
+			
+			if (response != null && response.has("id")) {
+				log.log(Level.INFO, trackId + " createPromptResource success - ID: " + response.getString("id"));
+				return response;
+			} else {
+				log.log(Level.WARN, trackId + " createPromptResource failed - response: " + response);
+			}
+		} catch (Exception e) {
+			log.log(Level.ERROR, trackId + " - createPromptResource error", e);
+		}
+		return null;
+	}
+
+	public static boolean updatePromptTts(String trackId, GenesysUser guser, String promptId, String resourceId, String ttsText) {
+		try {
+			String urlString = prefixApi + guser.urlRegion + "/api/v2/architect/prompts/" + promptId + "/resources/" + resourceId;
+			log.log(Level.INFO, trackId + " updatePromptTts urlString:" + urlString + " ttsText:" + ttsText);
+			
+			JSONObject body = new JSONObject();
+			body.put("ttsString", ttsText);
+			
+			StringEntity entity = new StringEntity(body.toString(), StandardCharsets.UTF_8);
+			entity.setContentType("application/json");
+			
+			Object result = refinePerformRequestPut(trackId, guser, urlString, entity, "application/json; charset=UTF-8");
+			JSONObject response = result instanceof JSONObject ? (JSONObject) result : null;
+			
+			if (response != null) {
+				log.log(Level.INFO, trackId + " updatePromptTts success for promptId: " + promptId);
+				return true;
+			} else {
+				log.log(Level.WARN, trackId + " updatePromptTts failed - response: " + response);
+			}
+		} catch (Exception e) {
+			log.log(Level.ERROR, trackId + " - updatePromptTts error", e);
+		}
+		return false;
+	}
+
+	public static String getPromptAudioUrl(String trackId, GenesysUser guser, String promptId, String language) {
+		try {
+			JSONArray resources = getPromptResources(trackId, guser, promptId);
+			for (int i = 0; i < resources.length(); i++) {
+				JSONObject resource = resources.getJSONObject(i);
+				String lang = resource.optString("language", "");
+				if (language == null || language.isEmpty() || lang.equalsIgnoreCase(language)) {
+					if (resource.has("mediaUri") && !resource.isNull("mediaUri")) {
+						return resource.getString("mediaUri");
+					}
+				}
+			}
+		} catch (Exception e) {
+			log.log(Level.INFO, trackId + " - getPromptAudioUrl ", e);
+		}
+		return null;
+	}
+
+	public static String getPromptTtsText(String trackId, GenesysUser guser, String promptId, String language) {
+		try {
+			JSONArray resources = getPromptResources(trackId, guser, promptId);
+			for (int i = 0; i < resources.length(); i++) {
+				JSONObject resource = resources.getJSONObject(i);
+				String lang = resource.optString("language", "");
+				if (language == null || language.isEmpty() || lang.equalsIgnoreCase(language)) {
+					if (resource.has("ttsString") && !resource.isNull("ttsString")) {
+						return resource.getString("ttsString");
+					}
+				}
+			}
+		} catch (Exception e) {
+			log.log(Level.INFO, trackId + " - getPromptTtsText ", e);
+		}
+		return null;
+	}
+
+	public static boolean uploadPromptAudio(String trackId, GenesysUser guser, String promptId, String resourceId, byte[] audioData) {
+		try {
+			String resourceUrl = prefixApi + guser.urlRegion + "/api/v2/architect/prompts/" + promptId + "/resources/" + resourceId;
+			log.log(Level.INFO, trackId + " Getting upload URI from: " + resourceUrl);
+			
+			Object result = refinePerformRequestGet(trackId, guser, resourceUrl);
+			JSONObject resource = result instanceof JSONObject ? (JSONObject) result : null;
+			
+			if (resource == null || !resource.has("uploadUri")) {
+				log.log(Level.ERROR, trackId + " uploadUri not found in resource response");
+				return false;
+			}
+			
+			String uploadUri = resource.getString("uploadUri");
+			log.log(Level.INFO, trackId + " Upload URI: " + uploadUri);
+			
+			return uploadAudioToUri(trackId, guser, uploadUri, audioData);
+			
+		} catch (Exception e) {
+			log.log(Level.ERROR, trackId + " - uploadPromptAudio ", e);
+		}
+		return false;
+	}
+
+	private static boolean uploadAudioToUri(String trackId, GenesysUser guser, String uploadUri, byte[] audioData) {
+		CloseableHttpClient httpClient = null;
+		CloseableHttpResponse response = null;
+		try {
+			httpClient = HttpClients.createDefault();
+			HttpPost httpPost = new HttpPost(uploadUri);
+			
+			String token = guser.getValidToken().getAccessToken();
+			httpPost.setHeader("Authorization", "bearer " + token);
+			
+			org.apache.http.entity.mime.MultipartEntityBuilder builder = org.apache.http.entity.mime.MultipartEntityBuilder.create();
+			builder.setMode(org.apache.http.entity.mime.HttpMultipartMode.BROWSER_COMPATIBLE);
+			builder.addBinaryBody("file", audioData, org.apache.http.entity.ContentType.create("audio/wav"), "audio.wav");
+			
+			HttpEntity multipartEntity = builder.build();
+			httpPost.setEntity(multipartEntity);
+			
+			response = httpClient.execute(httpPost);
+			int statusCode = response.getStatusLine().getStatusCode();
+			
+			String responseBody = "";
+			if (response.getEntity() != null) {
+				responseBody = IOUtils.toString(response.getEntity().getContent(), StandardCharsets.UTF_8);
+			}
+			
+			log.log(Level.INFO, trackId + " uploadAudioToUri status: " + statusCode + " response: " + responseBody);
+			return statusCode >= 200 && statusCode < 300;
+			
+		} catch (Exception e) {
+			log.log(Level.ERROR, trackId + " - uploadAudioToUri ", e);
+			return false;
+		} finally {
+			try {
+				if (response != null) response.close();
+				if (httpClient != null) httpClient.close();
+			} catch (Exception ignored) {}
+		}
+	}
+
+	public static byte[] downloadAudio(String trackId, String audioUrl) {
+		CloseableHttpClient httpClient = null;
+		CloseableHttpResponse response = null;
+		try {
+			httpClient = HttpClients.createDefault();
+			HttpGet httpGet = new HttpGet(audioUrl);
+			response = httpClient.execute(httpGet);
+			
+			if (response.getStatusLine().getStatusCode() == 200) {
+				return IOUtils.toByteArray(response.getEntity().getContent());
+			}
+		} catch (Exception e) {
+			log.log(Level.ERROR, trackId + " - downloadAudio ", e);
+		} finally {
+			try {
+				if (response != null) response.close();
+				if (httpClient != null) httpClient.close();
+			} catch (Exception ignored) {}
+		}
+		return null;
+	}
+
 }
-//http://www.ladbrokes.be/en/faq/#!/#/path/1919763652
