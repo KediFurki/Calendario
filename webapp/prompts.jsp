@@ -10,21 +10,19 @@
     <script src="https://cdn.jsdelivr.net/npm/uikit@3.21.6/dist/js/uikit-icons.min.js"></script>
     <style>
         body { background-color: #f8f9fa; padding: 20px; }
-        .nav-bar { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px 30px; margin: -20px -20px 20px -20px; display: flex; justify-content: space-between; align-items: center; }
+        .nav-bar { background: linear-gradient(135deg, #C21B17 0%, #9A1513 100%); padding: 15px 30px; margin: -20px -20px 20px -20px; display: flex; justify-content: space-between; align-items: center; }
         .nav-bar .nav-title { color: white; font-size: 20px; font-weight: bold; }
         .nav-bar .nav-links a { color: rgba(255,255,255,0.8); text-decoration: none; margin-left: 25px; font-weight: 500; transition: color 0.3s; }
         .nav-bar .nav-links a:hover, .nav-bar .nav-links a.active { color: white; }
 
-        /* DNIS cards */
         .dnis-grid { display: flex; flex-wrap: wrap; gap: 16px; justify-content: center; margin-top: 20px; }
         .dnis-card { background: white; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); padding: 20px 28px; cursor: pointer; transition: all 0.25s; min-width: 200px; text-align: center; border: 2px solid transparent; }
-        .dnis-card:hover { border-color: #667eea; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(102,126,234,0.25); }
+        .dnis-card:hover { border-color: #C21B17; transform: translateY(-2px); box-shadow: 0 6px 20px rgba(194,27,23,0.25); }
         .dnis-card .dnis-label { font-size: 22px; font-weight: 700; color: #333; }
         .dnis-card .dnis-sub { font-size: 12px; color: #888; margin-top: 4px; }
-        /* Table */
         .prompt-card { border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); background: white; overflow: hidden; }
         .prompt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .prompt-table th { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 10px 8px; text-align: left; font-weight: 600; white-space: nowrap; }
+        .prompt-table th { background: linear-gradient(135deg, #C21B17 0%, #9A1513 100%); color: white; padding: 10px 8px; text-align: left; font-weight: 600; white-space: nowrap; }
         .prompt-table td { padding: 8px; border-bottom: 1px solid #e5e5e5; vertical-align: middle; }
         .prompt-table tr:hover { background: #f8f9fa; }
         .prompt-table tr:last-child td { border-bottom: none; }
@@ -46,19 +44,23 @@
         .csv-toolbar { display: flex; gap: 10px; align-items: center; padding: 10px 20px; background: #f1f3f9; border-bottom: 1px solid #dee2e6; flex-wrap: wrap; }
         .csv-toolbar .sel-count { font-size: 13px; color: #555; }
         .section-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; background: #f1f3f9; border-bottom: 1px solid #dee2e6; flex-wrap: wrap; gap: 10px; }
-        .back-btn { cursor: pointer; color: #667eea; font-weight: 600; display: flex; align-items: center; gap: 6px; }
-        .back-btn:hover { color: #764ba2; }
+        .back-btn { cursor: pointer; color: #C21B17; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .back-btn:hover { color: #9A1513; }
         .filter-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
         .filter-bar input { padding: 6px 12px; border: 1px solid #ced4da; border-radius: 20px; font-size: 13px; width: 260px; }
         .pagination { display: flex; align-items: center; gap: 8px; padding: 12px 20px; background: #f8f9fa; border-top: 1px solid #dee2e6; }
         .page-btn { padding: 5px 12px; border-radius: 4px; border: 1px solid #ced4da; background: white; cursor: pointer; font-size: 13px; }
-        .page-btn:hover, .page-btn.active { background: #667eea; color: white; border-color: #667eea; }
+        .page-btn:hover, .page-btn.active { background: #C21B17; color: white; border-color: #C21B17; }
         .page-info { color: #666; font-size: 13px; }
         .loading-container { text-align: center; padding: 50px; }
         .tts-truncated { max-height: 54px; overflow: hidden; position: relative; }
         .info-text { font-size: 11px; color: #666; }
-        .header-group { text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .header-group { text-align: center; background: linear-gradient(135deg, #C21B17 0%, #9A1513 100%); }
         .header-sub { background: rgba(0,0,0,0.15); }
+        .uk-button-primary { background-color: #C21B17 !important; border-color: transparent !important; color: #fff !important; }
+        .uk-button-primary:hover, .uk-button-primary:focus { background-color: #9A1513 !important; }
+        .uk-text-primary { color: #C21B17 !important; }
+        .uk-checkbox:checked { background-color: #C21B17 !important; border-color: #C21B17 !important; }
     </style>
 </head>
 <body>
@@ -83,7 +85,7 @@
         <div class="prompt-card">
             <div class="section-header">
                 <span class="back-btn" onclick="showDnisScreen()"><span uk-icon="arrow-left"></span> Back to DNIS list</span>
-                <span style="font-weight:600; color:#444;">DNIS: <span id="selectedDnisLabel" style="color:#667eea;"></span></span>
+                <span style="font-weight:600; color:#444;">DNIS: <span id="selectedDnisLabel" style="color:#C21B17;"></span></span>
                 <div class="filter-bar">
                     <input type="text" id="filterInput" placeholder="🔍 Filter by name or TTS text..." oninput="debounceFilter()">
                     <span id="filterCount" class="uk-text-muted" style="font-size:12px;"></span>
@@ -105,9 +107,6 @@
                     </button>
                     <button class="uk-button uk-button-danger uk-button-small" onclick="deleteSelectedPrompts()" id="btnDeleteSelected" disabled>
                         <span uk-icon="icon:trash;ratio:0.8"></span> Delete Selected
-                    </button>
-                    <button class="uk-button uk-button-primary uk-button-small" onclick="createMissingPrompts()" id="btnCreateMissing">
-                        <span uk-icon="icon:plus-circle;ratio:0.8"></span> Create Missing
                     </button>
                 </div>
                 <div style="overflow-x:auto;">
@@ -182,8 +181,8 @@
             <input class="uk-input" type="text" id="addPrompt_name"
                    placeholder="e.g. V_03075_BG_test" oninput="updateAddPromptPreview()">
             <div style="font-size:11px; margin-top:6px; color:#888; min-height:32px;">
-                <span id="addPrompt_previewAsr" style="display:block; color:#667eea;"></span>
-                <span id="addPrompt_previewTmf" style="display:block; color:#764ba2;"></span>
+                <span id="addPrompt_previewAsr" style="display:block; color:#C21B17;"></span>
+                <span id="addPrompt_previewTmf" style="display:block; color:#9A1513;"></span>
             </div>
         </div>
         <div class="uk-margin">
@@ -262,7 +261,6 @@ function renderDnisCards(list) {
         html += '<div class="dnis-label">' + escapeHtml(item.dnis || '—') + '</div>';
         if (item.calledAddress) html += '<div class="dnis-sub">📞 ' + escapeHtml(item.calledAddress) + '</div>';
         if (item.abi)           html += '<div class="dnis-sub">ABI: ' + escapeHtml(item.abi) + '</div>';
-        if (item.environment)   html += '<div class="dnis-sub uk-badge">' + escapeHtml(item.environment) + '</div>';
         html += '</div>';
     });
     html += '</div>';
@@ -824,53 +822,6 @@ function saveNewPrompt() {
     .catch(function(e) {
         UIkit.notification({ message: 'Error: ' + e.message, status: 'danger' });
     });
-}
-
-function createMissingPrompts() {
-    var missingNames = [];
-    allRows.forEach(function(row) {
-        if (row.asr && row.asr.needsCreation && row.asr.name) missingNames.push(row.asr.name);
-        if (row.tmf && row.tmf.needsCreation && row.tmf.name) missingNames.push(row.tmf.name);
-    });
-
-    if (missingNames.length === 0) {
-        UIkit.notification({ message: 'No missing prompts — all calendar entries already exist in Genesys.', status: 'success' });
-        return;
-    }
-
-    UIkit.modal.confirm(
-        '<p>The following <strong>' + missingNames.length + '</strong> prompt(s) exist in the calendar but are <strong>not yet created</strong> in Genesys Cloud:</p>' +
-        '<ul style="max-height:180px;overflow-y:auto;font-size:12px;text-align:left;">' +
-            missingNames.map(function(n) { return '<li>' + escapeHtml(n) + '</li>'; }).join('') +
-        '</ul>' +
-        '<p class="uk-text-warning">Empty prompt shells (no TTS, no audio) will be created. <strong>This cannot be undone.</strong></p>'
-    ).then(function() {
-        UIkit.notification({ message: 'Creating ' + missingNames.length + ' missing prompt(s)...', status: 'primary' });
-
-        var creates = missingNames.map(function(exactName) {
-            return fetch(API_BASE + '/create', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ exactName: exactName })
-            }).then(function(r) { return r.json(); });
-        });
-
-        Promise.all(creates).then(function(results) {
-            var succeeded = results.filter(function(r) { return r.success; }).length;
-            var failed    = results.length - succeeded;
-            if (failed === 0) {
-                UIkit.notification({ message: succeeded + ' prompt(s) created successfully.', status: 'success' });
-            } else {
-                UIkit.notification({
-                    message: succeeded + ' created, ' + failed + ' failed. Check server logs for details.',
-                    status: 'warning'
-                });
-            }
-            loadPromptsForDnis();
-        }).catch(function(e) {
-            UIkit.notification({ message: 'Error during bulk creation: ' + e.message, status: 'danger' });
-        });
-    }, function() {});
 }
 
 function updateSelCount() {

@@ -2652,7 +2652,7 @@ public class Genesys {
 	public static JSONArray getAllPrompts(String trackId, GenesysUser guser) {
 		try {
 			return fetchAllEntities(trackId, (pageNumber) -> {
-				return getPromptsPage(trackId, guser, pageNumber, 100);
+				return getPromptsPage(trackId, guser, pageNumber, 100, null);
 			}, "getAllPrompts");
 		} catch (Exception e) {
 			log.log(Level.ERROR, trackId + " - getAllPrompts error", e);
@@ -2660,11 +2660,30 @@ public class Genesys {
 		}
 	}
 
-	public static JSONObject getPromptsPage(String trackId, GenesysUser guser, int pageNumber, int pageSize) {
+	public static JSONArray getAllPrompts(String trackId, GenesysUser guser, String nameFilter) {
 		try {
-			String urlString = prefixApi + guser.urlRegion + "/api/v2/architect/prompts?pageSize=" + pageSize + "&pageNumber=" + pageNumber;
+			return fetchAllEntities(trackId, (pageNumber) -> {
+				return getPromptsPage(trackId, guser, pageNumber, 100, nameFilter);
+			}, "getAllPrompts[" + nameFilter + "]");
+		} catch (Exception e) {
+			log.log(Level.ERROR, trackId + " - getAllPrompts[" + nameFilter + "] error", e);
+			return new JSONArray();
+		}
+	}
+
+	public static JSONObject getPromptsPage(String trackId, GenesysUser guser, int pageNumber, int pageSize) {
+		return getPromptsPage(trackId, guser, pageNumber, pageSize, null);
+	}
+
+	public static JSONObject getPromptsPage(String trackId, GenesysUser guser, int pageNumber, int pageSize, String nameFilter) {
+		try {
+			StringBuilder urlString = new StringBuilder(prefixApi + guser.urlRegion
+					+ "/api/v2/architect/prompts?pageSize=" + pageSize + "&pageNumber=" + pageNumber);
+			if (nameFilter != null && !nameFilter.isEmpty()) {
+				urlString.append("&name=").append(URLEncoder.encode(nameFilter, StandardCharsets.UTF_8.toString()));
+			}
 			log.log(Level.INFO, trackId + " getPromptsPage urlString:" + urlString);
-			Object result = refinePerformRequestGet(trackId, guser, urlString);
+			Object result = refinePerformRequestGet(trackId, guser, urlString.toString());
 			return result instanceof JSONObject ? (JSONObject) result : null;
 		} catch (Exception e) {
 			log.log(Level.INFO, trackId + " - getPromptsPage ", e);

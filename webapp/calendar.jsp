@@ -10,14 +10,14 @@
     <script src="https://cdn.jsdelivr.net/npm/uikit@3.21.6/dist/js/uikit-icons.min.js"></script>
     <style>
         body { background-color: #f8f9fa; padding: 20px; }
-        .nav-bar { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px 30px; margin: -20px -20px 20px -20px; display: flex; justify-content: space-between; align-items: center; }
+        .nav-bar { background: linear-gradient(135deg, #C21B17 0%, #9A1513 100%); padding: 15px 30px; margin: -20px -20px 20px -20px; display: flex; justify-content: space-between; align-items: center; }
         .nav-bar .nav-title { color: white; font-size: 20px; font-weight: bold; }
         .nav-bar .nav-links a { color: rgba(255,255,255,0.8); text-decoration: none; margin-left: 25px; font-weight: 500; transition: color 0.3s; }
         .nav-bar .nav-links a:hover, .nav-bar .nav-links a.active { color: white; }
         .calendar-card { border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 15px; transition: all 0.3s ease; }
         .calendar-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.12); }
-        .calendar-header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px 20px; border-radius: 8px 8px 0 0; cursor: pointer; text-decoration: none; }
-        .calendar-header:hover { background: linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%); color: white; }
+        .calendar-header { background: linear-gradient(135deg, #C21B17 0%, #9A1513 100%); color: white; padding: 15px 20px; border-radius: 8px 8px 0 0; cursor: pointer; text-decoration: none; }
+        .calendar-header:hover { background: linear-gradient(135deg, #9A1513 0%, #7a100e 100%); color: white; }
         .calendar-body { padding: 20px; background: white; border-radius: 0 0 8px 8px; }
         .day-input-group { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
         @media (max-width: 960px) { .day-input-group { grid-template-columns: repeat(4, 1fr); } }
@@ -27,9 +27,9 @@
         .special-days-section { margin-top: 20px; padding-top: 20px; border-top: 1px solid #e5e5e5; }
         .special-day-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 15px; background: #f8f9fa; border-radius: 5px; margin-bottom: 8px; }
         .special-day-item:hover { background: #e9ecef; }
-        .new-calendar-btn { background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); border: none; color: white; padding: 12px 30px; border-radius: 25px; font-weight: bold; cursor: pointer; transition: all 0.3s ease; }
-        .new-calendar-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(17,153,142,0.4); color: white; }
-        .section-title { color: #667eea; font-weight: bold; margin-bottom: 15px; }
+        .new-calendar-btn { background: linear-gradient(135deg, #C21B17 0%, #9A1513 100%); border: none; color: white; padding: 12px 30px; border-radius: 25px; font-weight: bold; cursor: pointer; transition: all 0.3s ease; }
+        .new-calendar-btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(194,27,23,0.4); color: white; }
+        .section-title { color: #C21B17; font-weight: bold; margin-bottom: 15px; }
         .info-text { font-size: 12px; color: #666; }
         .hidden { display: none; }
         .calendar-header-content { display: flex; justify-content: space-between; align-items: center; width: 100%; }
@@ -47,6 +47,11 @@
         .btn-remove-time-slot:hover { color: #a71d2a; }
         .day-box-enhanced { text-align: center; background: white; border-radius: 8px; padding: 10px; border: 1px solid #e5e5e5; }
         .day-box-enhanced label { font-weight: bold; display: block; margin-bottom: 8px; color: #333; font-size: 14px; }
+        /* UIkit Primary Color Overrides for Banca Generali */
+        .uk-button-primary { background-color: #C21B17 !important; border-color: transparent !important; color: #fff !important; }
+        .uk-button-primary:hover, .uk-button-primary:focus { background-color: #9A1513 !important; }
+        .uk-text-primary { color: #C21B17 !important; }
+        .uk-checkbox:checked { background-color: #C21B17 !important; border-color: #C21B17 !important; }
     </style>
 </head>
 <body>

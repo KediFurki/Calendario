@@ -194,28 +194,20 @@ public class PromptServlet extends HttpServlet {
 
     private void handleGetPromptsByDnis(HttpServletRequest request, HttpServletResponse response, String trackId) throws IOException {
         String dnis = request.getParameter("dnis");
-        if (dnis == null || dnis.isEmpty()) { sendErrorResponse(response, "dnis parameter is required"); return; }
-        // Show all environments (V_ and P_) in a single table
-        log.info(trackId + " Getting prompts for all envs, dnis=" + dnis);
-        JSONArray vRows = PromptService.getPromptsByEnvironmentAndDnis(trackId, "V_", dnis);
-        JSONArray pRows = PromptService.getPromptsByEnvironmentAndDnis(trackId, "P_", dnis);
-        // Merge: re-number rowIds and tag each row with its env
-        JSONArray merged = new JSONArray();
-        int idx = 1;
-        for (int i = 0; i < vRows.length(); i++) {
-            JSONObject row = vRows.getJSONObject(i);
-            row.put("rowId", idx++);
-            row.put("env", "V_");
-            merged.put(row);
+        if (dnis == null || dnis.isEmpty()) {
+            log.error(trackId + " [handleGetPromptsByDnis] Missing required query parameter: dnis");
+            sendErrorResponse(response, "dnis parameter is required");
+            return;
         }
-        for (int i = 0; i < pRows.length(); i++) {
-            JSONObject row = pRows.getJSONObject(i);
-            row.put("rowId", idx++);
-            row.put("env", "P_");
-            merged.put(row);
-        }
+        log.info(trackId + " [handleGetPromptsByDnis] Request received — dnis=" + dnis +
+                 " — delegating to PromptService.getPromptsByDnis (single API call)");
+        long t0 = System.currentTimeMillis();
+        JSONArray rows = PromptService.getPromptsByDnis(trackId, dnis);
+        long ms = System.currentTimeMillis() - t0;
+        log.info(trackId + " [handleGetPromptsByDnis] Completed in " + ms +
+                 " ms — returning " + rows.length() + " rows to client");
         response.setContentType("application/json; charset=UTF-8");
-        response.getWriter().write(merged.toString());
+        response.getWriter().write(rows.toString());
     }
 
     private void handleGetDnisConfigRows(HttpServletRequest request, HttpServletResponse response, String trackId) throws IOException {
@@ -276,10 +268,6 @@ public class PromptServlet extends HttpServlet {
     private void handleCreatePrompt(HttpServletRequest request, HttpServletResponse response, String trackId) throws IOException {
         String requestBody = request.getReader().lines().collect(java.util.stream.Collectors.joining());
         JSONObject requestJson = new JSONObject(requestBody);
-
-        // ── Pair-creation path (Add Prompt modal free-text input) ────────────────
-        // Client sends { "baseName": "V_03075_BG_Kampanya" }.
-        // Service splits on _BG_ and creates both _BG_A_ and _BG_D_ shells.
         if (requestJson.has("baseName")) {
             String baseName = requestJson.optString("baseName", "").trim();
             if (baseName.isEmpty()) {
@@ -292,8 +280,6 @@ public class PromptServlet extends HttpServlet {
             response.getWriter().write(result.toString());
             return;
         }
-
-        // ── Exact-name path (used by "Create Missing" bulk flow) ─────────────────
         if (requestJson.has("exactName")) {
             String exactName = requestJson.optString("exactName", "").trim();
             if (exactName.isEmpty()) {
@@ -331,7 +317,6 @@ public class PromptServlet extends HttpServlet {
             return;
         }
 
-        // ── Standard prefix-based path (existing behaviour) ───────────────────────
         String env = requestJson.optString("env", "V_");
         String name = requestJson.optString("name", "");
         String description = requestJson.optString("description", "");

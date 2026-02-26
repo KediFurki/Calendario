@@ -66,7 +66,6 @@ public class PromptService {
             for (int i = 0; i < rows.length(); i++) {
                 JSONObject row = rows.getJSONObject(i);
                 String headPrompt = row.optString("HeadPrompt", "").trim();
-                // When environmentPrefix is null, return all rows regardless of env
                 if (environmentPrefix != null && !environmentPrefix.isEmpty()
                         && !headPrompt.equals(environmentPrefix)) continue;
                 String dnis = row.optString("Dnis", "").trim();
@@ -94,21 +93,16 @@ public class PromptService {
                 return result;
             }
 
-            // Fetch ALL Genesys prompts in a single API call and index by name
+            String filterPrefix = environmentPrefix + dnis + "_BG_";
             JSONArray allPrompts = Genesys.getAllPrompts(trackId, guser);
             if (allPrompts == null || allPrompts.length() == 0) {
                 log.warn(trackId + " No prompts returned from Genesys Cloud");
                 return result;
             }
-            log.info(trackId + " Total Genesys prompts fetched: " + allPrompts.length());
-
-            // Filter prefix: e.g. "V_03075_BG_"
-            String filterPrefix = environmentPrefix + dnis + "_BG_";
+            log.info(trackId + " Genesys prompts fetched (all): " + allPrompts.length() + ", filtering client-side with prefix: " + filterPrefix);
             String asrInfix = "_BG_A_";
             String tmfInfix = "_BG_D_";
 
-            // Group by base suffix: for name "V_03075_BG_A_OpenHours" the key is "OpenHours"
-            // Map: baseName -> { "asr": raw, "tmf": raw }
             Map<String, JSONObject[]> grouped = new LinkedHashMap<>();
             for (int i = 0; i < allPrompts.length(); i++) {
                 JSONObject p = allPrompts.getJSONObject(i);
@@ -126,7 +120,7 @@ public class PromptService {
                     baseName = name.substring(tmfIdx + tmfInfix.length());
                     isAsr = false;
                 } else {
-                    continue; // not an ASR or TMF prompt — skip
+                    continue;
                 }
 
                 grouped.computeIfAbsent(baseName, k -> new JSONObject[2]);
@@ -134,7 +128,6 @@ public class PromptService {
                 else       grouped.get(baseName)[1] = p;
             }
             log.info(trackId + " Grouped base names for " + environmentPrefix + dnis + ": " + grouped.size());
-
             int idx = 1;
             for (Map.Entry<String, JSONObject[]> entry : grouped.entrySet()) {
                 String baseName = entry.getKey();
@@ -150,7 +143,6 @@ public class PromptService {
                 JSONObject tmfData = rawTmf != null
                         ? resolvePromptDetail(trackId, guser, rawTmf, tmfFullName)
                         : null;
-
                 JSONObject row = new JSONObject();
                 row.put("rowId", idx++);
                 row.put("name",  baseName);
@@ -164,6 +156,170 @@ public class PromptService {
         } catch (Exception e) {
             log.error(trackId + " Error in getPromptsByEnvironmentAndDnis", e);
         }
+        return result;
+    }
+
+    public static JSONArray getPromptsByDnis(String trackId, String dnis) {
+        JSONArray result = new JSONArray();
+        long t0 = System.currentTimeMillis();
+
+        log.info(trackId + " === [getPromptsByDnis] START  dnis=" + dnis + " ===");
+
+        if (dnis == null || dnis.trim().isEmpty()) {
+            log.error(trackId + " [getPromptsByDnis] dnis parameter is null or empty - aborting.");
+            return result;
+        }
+        dnis = dnis.trim();
+
+        GenesysUser guser = getGenesysUser(trackId);
+        if (guser == null) {
+            log.error(trackId + " [getPromptsByDnis] GenesysUser could not be created - check clientId/clientSecret/urlRegion in properties.");
+            return result;
+        }
+        log.info(trackId + " [getPromptsByDnis] GenesysUser created successfully.");
+        log.info(trackId + " [getPromptsByDnis] Calling Genesys.getAllPrompts (no server-side filter) ...");
+        long apiStart = System.currentTimeMillis();
+        JSONArray allPrompts = Genesys.getAllPrompts(trackId, guser);
+        long apiMs = System.currentTimeMillis() - apiStart;
+
+        if (allPrompts == null || allPrompts.length() == 0) {
+            log.warn(trackId + " [getPromptsByDnis] Genesys.getAllPrompts returned " +
+                     (allPrompts == null ? "null" : "empty array") +
+                     " after " + apiMs + " ms - nothing to filter.");
+            return result;
+        }
+        log.info(trackId + " [getPromptsByDnis] API call completed in " + apiMs +
+                 " ms - total prompts received: " + allPrompts.length());
+
+        String vPrefix = "V_" + dnis + "_BG_";
+        String pPrefix = "P_" + dnis + "_BG_";
+        String asrInfix = "_BG_A_";
+        String tmfInfix = "_BG_D_";
+        log.info(trackId + " [getPromptsByDnis] Filter prefixes - V: \"" + vPrefix + "\"  P: \"" + pPrefix + "\"");
+
+        Map<String, JSONObject[]> grouped = new LinkedHashMap<>();
+        Map<String, String> keyToEnv = new LinkedHashMap<>();
+
+        int scannedV = 0, scannedP = 0, skipped = 0;
+        for (int i = 0; i < allPrompts.length(); i++) {
+            JSONObject p = allPrompts.getJSONObject(i);
+            String name = p.optString("name", "").trim();
+            if (name.isEmpty()) { skipped++; continue; }
+
+            String env;
+            if (name.startsWith(vPrefix)) {
+                env = "V_";
+                scannedV++;
+            } else if (name.startsWith(pPrefix)) {
+                env = "P_";
+                scannedP++;
+            } else {
+                skipped++;
+                continue;
+            }
+
+            int asrIdx = name.indexOf(asrInfix);
+            int tmfIdx = name.indexOf(tmfInfix);
+            String baseName;
+            boolean isAsr;
+            if (asrIdx >= 0) {
+                baseName = name.substring(asrIdx + asrInfix.length());
+                isAsr    = true;
+            } else if (tmfIdx >= 0) {
+                baseName = name.substring(tmfIdx + tmfInfix.length());
+                isAsr    = false;
+            } else {
+                log.warn(trackId + " [getPromptsByDnis] Prompt \"" + name +
+                         "\" matches env prefix but has no _BG_A_ / _BG_D_ infix - skipping.");
+                skipped++;
+                continue;
+            }
+
+            String compositeKey = env + "|" + baseName;
+            grouped.computeIfAbsent(compositeKey, k -> new JSONObject[2]);
+            keyToEnv.put(compositeKey, env);
+            if (isAsr) {
+                grouped.get(compositeKey)[0] = p;
+                log.debug(trackId + " [getPromptsByDnis] Mapped ASR  env=" + env + "  baseName=" + baseName + "  promptName=" + name);
+            } else {
+                grouped.get(compositeKey)[1] = p;
+                log.debug(trackId + " [getPromptsByDnis] Mapped TMF  env=" + env + "  baseName=" + baseName + "  promptName=" + name);
+            }
+        }
+
+        log.info(trackId + " [getPromptsByDnis] Scan complete -" +
+                 "  total=" + allPrompts.length() +
+                 "  matched V_=" + scannedV +
+                 "  matched P_=" + scannedP +
+                 "  skipped=" + skipped +
+                 "  unique (env+baseName) groups=" + grouped.size());
+
+        if (grouped.isEmpty()) {
+            log.warn(trackId + " [getPromptsByDnis] No prompts matched for dnis=" + dnis +
+                     " - returning empty result.");
+            return result;
+        }
+
+        int rowId = 1;
+        int resolvedAsr = 0, resolvedTmf = 0, stubAsr = 0, stubTmf = 0;
+
+        for (Map.Entry<String, JSONObject[]> entry : grouped.entrySet()) {
+            String compositeKey = entry.getKey();
+            String env          = keyToEnv.get(compositeKey);
+            String baseName     = compositeKey.substring(compositeKey.indexOf('|') + 1);
+            JSONObject rawAsr   = entry.getValue()[0];
+            JSONObject rawTmf   = entry.getValue()[1];
+
+            String asrFullName = env + dnis + asrInfix + baseName;
+            String tmfFullName = env + dnis + tmfInfix + baseName;
+
+            log.info(trackId + " [getPromptsByDnis] Resolving row #" + rowId +
+                     "  env=" + env + "  baseName=" + baseName +
+                     "  hasAsr=" + (rawAsr != null) + "  hasTmf=" + (rawTmf != null));
+
+            JSONObject asrData, tmfData;
+            if (rawAsr != null) {
+                log.debug(trackId + " [getPromptsByDnis] Fetching ASR resource details for: " + asrFullName);
+                asrData = resolvePromptDetail(trackId, guser, rawAsr, asrFullName);
+                resolvedAsr++;
+                log.debug(trackId + " [getPromptsByDnis] ASR resolved - hasAudio=" +
+                          asrData.optBoolean("hasAudio") + "  ttsLen=" +
+                          asrData.optString("ttsText", "").length());
+            } else {
+                log.info(trackId + " [getPromptsByDnis] ASR not found in Genesys — creating empty stub for: " + asrFullName);
+                asrData = emptyPromptStub(asrFullName);
+                stubAsr++;
+            }
+
+            if (rawTmf != null) {
+                log.debug(trackId + " [getPromptsByDnis] Fetching TMF resource details for: " + tmfFullName);
+                tmfData = resolvePromptDetail(trackId, guser, rawTmf, tmfFullName);
+                resolvedTmf++;
+                log.debug(trackId + " [getPromptsByDnis] TMF resolved - hasAudio=" +
+                          tmfData.optBoolean("hasAudio") + "  ttsLen=" +
+                          tmfData.optString("ttsText", "").length());
+            } else {
+                log.info(trackId + " [getPromptsByDnis] TMF not found in Genesys — creating empty stub for: " + tmfFullName);
+                tmfData = emptyPromptStub(tmfFullName);
+                stubTmf++;
+            }
+
+            JSONObject row = new JSONObject();
+            row.put("rowId", rowId++);
+            row.put("env",   env);
+            row.put("name",  baseName);
+            row.put("asr",   asrData);
+            row.put("tmf",   tmfData);
+            result.put(row);
+        }
+
+        long totalMs = System.currentTimeMillis() - t0;
+        log.info(trackId + " [getPromptsByDnis] Build complete -" +
+                 "  rows=" + result.length() +
+                 "  resolvedAsr=" + resolvedAsr + "  stubAsr=" + stubAsr +
+                 "  resolvedTmf=" + resolvedTmf + "  stubTmf=" + stubTmf);
+        log.info(trackId + " === [getPromptsByDnis] END  totalTimeMs=" + totalMs +
+                 "  returning " + result.length() + " rows ===");
         return result;
     }
 
@@ -247,13 +403,11 @@ public class PromptService {
                     }
                 }
             }
-
             if (prefixes.isEmpty()) {
                 log.warn(trackId + " No DnisConfig rows found for environment: " + environmentPrefix
                         + " — falling back to fixed prefix: " + environmentPrefix + "Dnis_BG_");
                 prefixes.add(environmentPrefix + "Dnis_BG_");
             }
-
             JSONArray allPrompts = Genesys.getAllPrompts(trackId, guser);
             if (allPrompts == null || allPrompts.length() == 0) {
                 log.warn(trackId + " No prompts found in Genesys Cloud");
@@ -265,7 +419,6 @@ public class PromptService {
                 JSONObject prompt = allPrompts.getJSONObject(i);
                 String promptName = prompt.optString("name", "").trim();
                 if (promptName.isEmpty()) continue;
-
                 String matchedPrefix = null;
                 for (String prefix : prefixes) {
                     if (promptName.startsWith(prefix)) {
@@ -274,7 +427,6 @@ public class PromptService {
                     }
                 }
                 if (matchedPrefix == null) continue;
-
                 log.info(trackId + " Found matching prompt: " + promptName);
                 JSONObject promptInfo = getPromptInfo(trackId, guser, promptName);
                 if (promptInfo != null) {
@@ -724,21 +876,6 @@ public class PromptService {
             return null;
         }
     }
-
-    /**
-     * Creates an ASR (_BG_A_) and TMF (_BG_D_) prompt pair from a single free-form
-     * base name entered by the user.
-     *
-     * The user supplies the full base string up to (and including) "_BG_", for
-     * example "V_03075_BG_Kampanya".  The method splits on the LAST occurrence of
-     * "_BG_" and inserts "_BG_A_" / "_BG_D_" to produce:
-     *   • "V_03075_BG_A_Kampanya"
-     *   • "V_03075_BG_D_Kampanya"
-     *
-     * @param trackId   request tracking ID
-     * @param baseName  free-form user input, must contain "_BG_"
-     * @return JSON with success flag plus promptId/resourceId for each half
-     */
     public static JSONObject createPromptPair(String trackId, String baseName) {
         JSONObject result = new JSONObject();
         try {
@@ -747,10 +884,6 @@ public class PromptService {
                 result.put("message", "baseName must not be empty");
                 return result;
             }
-
-            // Sanitize: if the user accidentally typed the full ASR/TMF name
-            // (e.g. V_03075_BG_A_Kampanya or V_03075_BG_D_Kampanya),
-            // strip the extra infix so we always work with a clean base name.
             baseName = baseName.trim()
                                .replaceAll("_BG_A_", "_BG_")
                                .replaceAll("_BG_D_", "_BG_");
@@ -768,10 +901,9 @@ public class PromptService {
                 return result;
             }
 
-            // Build the two full names
             int bgIdx = baseName.lastIndexOf("_BG_");
-            String prefix = baseName.substring(0, bgIdx);      // e.g. "V_03075"
-            String suffix = baseName.substring(bgIdx + 4);     // e.g. "Kampanya"
+            String prefix = baseName.substring(0, bgIdx);
+            String suffix = baseName.substring(bgIdx + 4);
             String asrName = prefix + "_BG_A_" + suffix;
             String tmfName = prefix + "_BG_D_" + suffix;
 
